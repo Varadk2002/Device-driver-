@@ -1,0 +1,110 @@
+#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/slab.h>
+#include <linux/i2c.h>
+#include <linux/delay.h>
+#include <linux/kernel.h>
+
+#define I2C_BUS_AVAILABLE   2
+#define SLAVE_DEVICE_NAME   "AT24C256"
+#define eeprom_SLAVE_ADDR   0x50
+
+static struct i2c_adapter *desd_i2c_adapter = NULL;
+static struct i2c_client  *desd_i2c_client_eeprom = NULL;
+
+static int I2C_Write(unsigned char *buf, unsigned int len)
+{
+    int ret = i2c_master_send(desd_i2c_client_eeprom, buf, len);
+    return ret;
+}
+
+static int I2C_Read(unsigned char *out_buf, unsigned int len)
+{
+    int ret = i2c_master_recv(desd_i2c_client_eeprom, out_buf, len);
+    return ret;
+}
+
+// char device ops -- open(), close(), read(), write(), ...
+
+static int desd_eeprom_probe(struct i2c_client *client, const struct i2c_device_id *id)
+{
+        char buf[32];
+    pr_info("EEPROM Probed!!!\n");
+    // device config/checking -- i2c_master_send()
+    // alloc device number
+    // create device class
+    // create device file
+    // init cdev and add it
+        return 0;
+}
+
+static int desd_eeprom_remove(struct i2c_client *client)
+{
+    pr_info("EEPROM Removed!!!\n");
+    // delete cdev
+    // destroy device file
+    // destroy class
+    // unregister device number
+    // device de-initialization
+    return 0;
+}
+
+static const struct i2c_device_id desd_eeprom_id[] = {
+        { SLAVE_DEVICE_NAME, 0 },
+        { }
+};
+MODULE_DEVICE_TABLE(i2c, desd_eeprom_id);
+
+static struct i2c_driver desd_eeprom_driver = {
+    .driver = {
+        .name   = SLAVE_DEVICE_NAME,
+        .owner  = THIS_MODULE,
+    },
+    .probe          = desd_eeprom_probe,
+    .remove         = desd_eeprom_remove,
+    .id_table       = desd_eeprom_id,
+};
+
+static struct i2c_board_info eeprom_i2c_board_info = {
+    I2C_BOARD_INFO(SLAVE_DEVICE_NAME, eeprom_SLAVE_ADDR)
+};
+
+static int __init desd_driver_init(void) {
+    int ret = -1;
+    desd_i2c_adapter = i2c_get_adapter(I2C_BUS_AVAILABLE);
+
+    if(desd_i2c_adapter != NULL) {
+        desd_i2c_client_eeprom = i2c_new_device(desd_i2c_adapter, &eeprom_i2c_board_info);
+        //desd_i2c_client_eeprom = i2c_new_client_device(desd_i2c_adapter, &eeprom_i2c_board_info);
+
+        if(desd_i2c_client_eeprom != NULL) {
+            i2c_add_driver(&desd_eeprom_driver);
+                pr_info("Driver Added!!!\n");
+            ret = 0;
+        }
+                else
+                pr_info("EEPROM client not found!!!\n");
+
+        i2c_put_adapter(desd_i2c_adapter);
+    }
+        else
+        pr_info("I2C Bus Adapter Not Available!!!\n");
+
+    return ret;
+}
+
+static void __exit desd_driver_exit(void)
+{
+        if(desd_i2c_client_eeprom != NULL) {
+                i2c_del_driver(&desd_eeprom_driver);
+            i2c_unregister_device(desd_i2c_client_eeprom);
+        }
+    pr_info("Driver Removed!!!\n");
+}
+
+module_init(desd_driver_init);
+module_exit(desd_driver_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Sunbeam DESD <desd@sunbeaminfo.com>");
+MODULE_DESCRIPTION("Simple I2C driver(EEPROM)");
