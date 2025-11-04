@@ -1,0 +1,111 @@
+#include <linux/module.h>
+#include <linux/usb.h>
+#include <linux/fs.h>
+
+#define EP_IN   0x81
+#define EP_OUT  0x02
+
+static struct usb_device *mydev;
+
+static int my_dev_open(struct inode *pinode, struct file *pfile) {
+    pr_info("%s: my_dev_open() called\n", THIS_MODULE->name);
+    return 0;
+}
+
+static int my_dev_close(struct inode *pinode, struct file *pfile) {
+    pr_info("%s: my_dev_close() called\n", THIS_MODULE->name);
+    return 0;
+}
+
+static ssize_t my_dev_write(struct file *pfile, const char *ubuf, size_t size, loff_t *poffset) {
+    unsigned int pipe;
+    int ret, nbytes = 0;
+    char buf[32] = "Hello";
+    // copy data to write from user buffer to buf -- copy_from_user()
+    pr_info("%s: my_dev_write() called\n", THIS_MODULE->name);
+    pipe = usb_sndbulkpipe(mydev, EP_OUT);
+    ret = usb_bulk_msg(mydev, pipe, buf, sizeof(buf), &nbytes, 5000);
+    pr_info("%s: data written to usb device = %d - %s\n", THIS_MODULE->name, ret, buf);
+    return nbytes;
+}
+
+static ssize_t my_dev_read(struct file *pfile, char *ubuf, size_t size, loff_t *poffset) {
+    unsigned int pipe;
+    int ret, nbytes = 0;
+    char buf[32] = "";
+    pr_info("%s: my_dev_read() called\n", THIS_MODULE->name);
+    pipe = usb_rcvbulkpipe(mydev, EP_IN);
+    ret = usb_bulk_msg(mydev, pipe, buf, sizeof(buf), &nbytes, 5000);
+    pr_info("%s: data read from usb device = %d - %s\n", THIS_MODULE->name, ret, buf);
+    // copy read data to the user space buffer - copy_to_user().
+    return nbytes;
+}
+
+static struct file_operations my_ops = {
+    .owner = THIS_MODULE,
+    .open = my_dev_open,
+    .release = my_dev_close,
+    .write = my_dev_write,
+    .read = my_dev_read
+};
+
+static struct usb_class_driver usb_class;
+
+static int my_device_probe(struct usb_interface *intf, const struct usb_device_id *id) {
+    int ret;
+    pr_info("%s: my_device_probe() called\n", THIS_MODULE->name);
+    // get device info
+    mydev = interface_to_usbdev(intf);
+    pr_info("%s: got usb device %s\n", THIS_MODULE->name, mydev->product);
+    // create device file and init device operation
+    usb_class.fops = &my_ops;
+    usb_class.name = "usb/desd%d";
+    ret = usb_register_dev(intf, &usb_class);
+    pr_info("%s: usb_register_dev() retruned %d\n", THIS_MODULE->name, ret);
+    return ret;
+}
+
+static void my_device_remove(struct usb_interface *intf) {
+    pr_info("%s: my_device_remove() called\n", THIS_MODULE->name);
+    // destroy device files
+    usb_deregister_dev(intf, &usb_class);
+    pr_info("%s: usb_deregister_dev() called.\n", THIS_MODULE->name);
+}
+
+static struct usb_device_id my_device_ids[] = {
+    { USB_DEVICE(0x0951, 0x1643) }, // device 0 id
+    { USB_DEVICE(0x0781, 0x5567) }, // device 1 id
+    { }                             // empty entry
+};
+
+MODULE_DEVICE_TABLE(usb, my_device_ids); // export device ids into sym table
+
+static struct usb_driver my_driver = {
+    .name = "my_driver",
+    .id_table = my_device_ids,
+    .probe = my_device_probe,
+    .disconnect = my_device_remove
+};
+
+static int __init desd_init(void) {
+    int ret;
+    pr_info("%s: desd_init() called\n", THIS_MODULE->name);
+    // register usb driver
+    ret = usb_register(&my_driver);
+    pr_info("%s: usb_register() returned: %d\n", THIS_MODULE->name, ret);
+    return 0;
+}
+
+static void __exit desd_exit(void) {
+    pr_info("%s: desd_exit() called\n", THIS_MODULE->name);
+    // unregister usb driver
+    usb_deregister(&my_driver);
+    pr_info("%s: usb_register() called.\n", THIS_MODULE->name);
+}
+
+module_init(desd_init);
+module_exit(desd_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Varad");
+MODULE_DESCRIPTION("Usb example driver");
